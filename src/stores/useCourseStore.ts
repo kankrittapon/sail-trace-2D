@@ -30,9 +30,9 @@ export const useCourseStore = create<CourseStore>((set, get) => ({
         console.warn('Using new generateRaceCourse instead');
         get().generateRaceCourse(windDir);
     },
-    generateRaceCourse: (windDir: number, laps: number = 2) => {
+    generateRaceCourse: (windDir: number, laps: number = 2, options = { useOffset: true, useGate: true }) => {
         const startPoint = { lat: DEFAULT_ORIGIN.lat, lng: DEFAULT_ORIGIN.lon };
-        const layout = generateWindwardLeewardCourse(startPoint, windDir);
+        const layout = generateWindwardLeewardCourse(startPoint, windDir, 1.0, 40, options);
         
         const raceData: RaceData = {
             course_layout: layout,

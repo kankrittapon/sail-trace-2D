@@ -1,5 +1,6 @@
 import { useCourseStore } from '../../stores/useCourseStore';
 import Buoy from './Buoy';
+import Laylines from './Laylines';
 
 
 export default function CourseManager() {
@@ -10,6 +11,8 @@ export default function CourseManager() {
 
     return (
         <group>
+            <Laylines />
+
             {/* Start Line */}
             {showStart && course.startLine.map(p => <Buoy key={p.id} mark={p} />)}
 

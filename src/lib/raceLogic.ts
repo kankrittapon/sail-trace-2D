@@ -34,54 +34,81 @@ export function checkMarkRounding(
 }
 
 // Logic 2: Marks Placement (Course Setting)
+// Logic 2: Marks Placement (Course Setting)
 export function generateWindwardLeewardCourse(
     startMidpoint: Coordinate,
     windDirection: number,
     legDistanceNM: number = 1.0, 
-    gateWidthMeters: number = 40
+    gateWidthMeters: number = 40,
+    options: { useOffset: boolean; useGate: boolean } = { useOffset: true, useGate: true }
 ): CourseLayout {
     const legDistanceMeters = legDistanceNM * 1852;
 
     // 1. Calculate Start Line (Perpendicular to wind)
-    // Start line usually width of 1.5 * fleet size, roughly 100-300m. Let's say 200m total.
     const startHalfWidth = 100;
     const startP1 = computeDestinationPoint(startMidpoint, startHalfWidth, windDirection - 90);
     const startP2 = computeDestinationPoint(startMidpoint, startHalfWidth, windDirection + 90);
 
-    // 2. Calculate Mark 1 (Windward) - Directly upwind
+    // 2. Calculate Mark 1 (Windward)
     const mark1Pos = computeDestinationPoint(startMidpoint, legDistanceMeters, windDirection);
     
-    // 3. Calculate Mark 1A (Offset) - 90 degrees left (approx 100m) for port rounding
-    // User said: "approx 50-100m, 90 degrees"
-    const mark1APos = computeDestinationPoint(mark1Pos, 80, windDirection - 90);
+    const marks: Mark[] = [
+        { id: "M1", name: "Mark 1", pos: mark1Pos, radius: 24, role: 'mark1', rounding: 'port' }
+    ];
 
-    // 4. Calculate Gate (4S/4P) - Leeward
-    // User said: "Usually slightly above Start Line". Let's put it 50m above start midpoint.
-    const gateCenter = computeDestinationPoint(startMidpoint, 50, windDirection);
-    const gateHalfWidth = gateWidthMeters / 2;
+    // 3. Optional Mark 1A
+    if (options.useOffset) {
+        const mark1APos = computeDestinationPoint(mark1Pos, 80, windDirection - 90);
+        marks.push({ id: "M1A", name: "Mark 1A", pos: mark1APos, radius: 24, role: 'mark1a', rounding: 'port' });
+    }
+
+    // 4. Optional Gate (4S/4P) or simple Leeward Mark
+    // For MVO, if useGate is false, we might just use Start Pin as Leeward? Or a specific Mark 2?
+    // User request: "Minimum Viable Object ... Start Line -> Mark 1 -> Finish Line"
+    // So if NO GATE, we just don't add leeward marks? Or do we need a Leeward Mark?
+    // "Finish Line ... (usually same as Start)".
+    // If laps > 1, need to return to Leeward. If MVO, maybe use Start Line as Gate?
+    // Let's stick to: If useGate is true, add gates. If false, rely on Start/Finish or just up/down.
     
-    // Gate is perpendicular to wind (same as start line)
-    // 4P (Port Gate) - Left looking downwind? 
-    // Usually looking UPWIND:
-    // 4S (Starboard Mark of the gate) is on the right looking upwind.
-    // 4P (Port Mark of the gate) is on the left looking upwind.
-    const gate4S_Pos = computeDestinationPoint(gateCenter, gateHalfWidth, windDirection + 90);
-    const gate4P_Pos = computeDestinationPoint(gateCenter, gateHalfWidth, windDirection - 90);
+    if (options.useGate) {
+        const gateCenter = computeDestinationPoint(startMidpoint, 50, windDirection);
+        const gateHalfWidth = gateWidthMeters / 2;
+        const gate4S_Pos = computeDestinationPoint(gateCenter, gateHalfWidth, windDirection + 90);
+        const gate4P_Pos = computeDestinationPoint(gateCenter, gateHalfWidth, windDirection - 90);
+        
+        marks.push({ id: "G4S", name: "Gate 4S", pos: gate4S_Pos, radius: 24, role: 'gate', rounding: 'starboard' });
+        marks.push({ id: "G4P", name: "Gate 4P", pos: gate4P_Pos, radius: 24, role: 'gate', rounding: 'port' });
+    }
 
-    // Finish Line - User said "Below Gate" or "Below Mark 1"
-    // Let's place it slightly below Start Line (Downwind Finish)
-    const finishMidpoint = computeDestinationPoint(startMidpoint, 50, windDirection + 180); // 50m below start
+    // Finish Line
+    const finishMidpoint = computeDestinationPoint(startMidpoint, 50, windDirection + 180); 
     const finishP1 = computeDestinationPoint(finishMidpoint, startHalfWidth, windDirection - 90);
     const finishP2 = computeDestinationPoint(finishMidpoint, startHalfWidth, windDirection + 90);
 
     return {
         start_line: { p1: startP1, p2: startP2 },
         finish_line: { p1: finishP1, p2: finishP2 },
-        marks: [
-            { id: "M1", name: "Mark 1", pos: mark1Pos, radius: 24, role: 'mark1', rounding: 'port' },
-            { id: "M1A", name: "Mark 1A", pos: mark1APos, radius: 24, role: 'mark1a', rounding: 'port' },
-            { id: "G4S", name: "Gate 4S", pos: gate4S_Pos, radius: 24, role: 'gate', rounding: 'starboard' },
-            { id: "G4P", name: "Gate 4P", pos: gate4P_Pos, radius: 24, role: 'gate', rounding: 'port' }
-        ]
+        marks: marks
     };
+}
+
+// Logic 6: Laylines Calculation
+export function calculateLaylinePoints(
+    markPos: Coordinate,
+    windDirection: number,
+    lengthMeters: number = 2000,
+    tackingAngle: number = 45
+) {
+    // Starboard Layline: Wind + 180 + Angle
+    const starboardAngle = (windDirection + 180 + tackingAngle) % 360;
+    const pStarboard = computeDestinationPoint(markPos, lengthMeters, starboardAngle);
+
+    // Port Layline: Wind + 180 - Angle
+    // Handle negative angle result from subtraction
+    let portAngle = (windDirection + 180 - tackingAngle) % 360;
+    if (portAngle < 0) portAngle += 360;
+    
+    const pPort = computeDestinationPoint(markPos, lengthMeters, portAngle);
+
+    return { pStarboard, pPort };
 }
